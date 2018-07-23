@@ -30,6 +30,10 @@ limitations under the License.
   <artifactId>flume-taildir-source</artifactId>
   <name>Flume Taildir Source</name>
 
+  <properties>
+    <jna.version>3.3.0</jna.version>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.apache.flume</groupId>
@@ -40,6 +44,18 @@ limitations under the License.
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <scope>test</scope>
+    </dependency>
+
+    <dependency>
+        <groupId>net.java.dev.jna</groupId>
+        <artifactId>jna</artifactId>
+        <version>${jna.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>net.java.dev.jna</groupId>
+        <artifactId>jna</artifactId>
+        <version>${jna.version}</version>
+        <classifier>platform</classifier>
     </dependency>
   </dependencies>
 

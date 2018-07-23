@@ -85,7 +85,7 @@ public class SpoolDirectorySourceConfigurationConstants {
   /** What to do when there is a character set decoding error. */
   public static final String DECODE_ERROR_POLICY = "decodeErrorPolicy";
   public static final String DEFAULT_DECODE_ERROR_POLICY =
-      DecodeErrorPolicy.FAIL.name();
+      DecodeErrorPolicy.IGNORE.name();
 
   public static final String MAX_BACKOFF = "maxBackoff";
 
@@ -105,7 +105,7 @@ public class SpoolDirectorySourceConfigurationConstants {
    * this setting
    */
   public static final String RECURSIVE_DIRECTORY_SEARCH = "recursiveDirectorySearch";
-  public static final boolean DEFAULT_RECURSIVE_DIRECTORY_SEARCH = false;
+  public static final boolean DEFAULT_RECURSIVE_DIRECTORY_SEARCH = true;
 
   /** Delay(in milliseconds) used when polling for new files. The default is 500ms */
   public static final String POLL_DELAY = "pollDelay";

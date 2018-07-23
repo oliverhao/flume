@@ -106,6 +106,7 @@ public class TimestampInterceptor implements Interceptor {
   }
 
   public static class Constants {
+    public static String TIMESTAMP = "timestamp";
     public static final String CONFIG_PRESERVE = "preserveExisting";
     public static final boolean DEFAULT_PRESERVE = false;
     public static final String CONFIG_HEADER_NAME = "headerName";

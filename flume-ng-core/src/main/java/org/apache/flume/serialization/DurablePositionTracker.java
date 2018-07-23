@@ -20,6 +20,7 @@ package org.apache.flume.serialization;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 
 import com.google.common.base.Preconditions;
 import org.apache.avro.file.DataFileReader;
@@ -92,16 +93,27 @@ public class DurablePositionTracker implements PositionTracker {
     // so that if it does not exist at startup, check for a rolled version
     // before creating a new file from scratch.
     if (PlatformDetect.isWindows()) {
+      /*
       if (!trackerFile.delete()) {
         throw new IOException("Unable to delete existing meta file " +
             trackerFile);
       }
-    }
+       */
 
-    // rename tmp file to meta
-    if (!tmpMeta.renameTo(trackerFile)) {
-      throw new IOException("Unable to rename " + tmpMeta + " to " +
-          trackerFile);
+      try {
+        Files.move(tmpMeta.toPath(), trackerFile.toPath(), 
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      } catch (IOException ex) {
+        throw ex;
+        //Logger.getLogger(SomeClass.class.getName()).log(Level.SEVERE, null, ex);
+      }
+    } else {
+
+      // rename tmp file to meta
+      if (!tmpMeta.renameTo(trackerFile)) {
+        throw new IOException("Unable to rename " + tmpMeta + " to " +
+            trackerFile);
+      }
     }
 
     // return a new known-good version that is open for append

@@ -30,6 +30,7 @@ import org.apache.flume.FlumeException;
 import org.apache.flume.annotations.InterfaceAudience;
 import org.apache.flume.annotations.InterfaceStability;
 import org.apache.flume.client.avro.ReliableEventReader;
+import org.apache.flume.source.taildir.util.WinFileUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +48,7 @@ import java.util.Map.Entry;
 @InterfaceStability.Evolving
 public class ReliableTaildirEventReader implements ReliableEventReader {
   private static final Logger logger = LoggerFactory.getLogger(ReliableTaildirEventReader.class);
+  private static final String OS_NAME = System.getProperty("os.name").toLowerCase();
 
   private final List<TaildirMatcher> taildirCache;
   private final Table<String, String, String> headerTable;
@@ -59,6 +61,14 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
   private boolean committed = true;
   private final boolean annotateFileName;
   private final String fileNameHeader;
+  private boolean multiline;
+  private String multilinePattern;
+  private String multilinePatternBelong;
+  private boolean multilinePatternMatched;
+  private long multilineEventTimeoutSecs;
+  private int multilineMaxBytes;
+  private int multilineMaxLines;
+
 
   /**
    * Create a ReliableTaildirEventReader to watch the given directory.
@@ -66,7 +76,12 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
   private ReliableTaildirEventReader(Map<String, String> filePaths,
       Table<String, String, String> headerTable, String positionFilePath,
       boolean skipToEnd, boolean addByteOffset, boolean cachePatternMatching,
-      boolean annotateFileName, String fileNameHeader) throws IOException {
+      boolean annotateFileName, String fileNameHeader,
+      boolean multiline, String multilinePattern,
+      String multilinePatternBelong, boolean multilinePatternMatched, long eventTimeoutSecs,
+      int multilineMaxBytes, int multilineMaxLines)
+          throws IOException {
+
     // Sanity checks
     Preconditions.checkNotNull(filePaths);
     Preconditions.checkNotNull(positionFilePath);
@@ -89,6 +104,14 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
     this.cachePatternMatching = cachePatternMatching;
     this.annotateFileName = annotateFileName;
     this.fileNameHeader = fileNameHeader;
+    this.multiline = multiline;
+    this.multilinePattern = multilinePattern;
+    this.multilinePatternBelong = multilinePatternBelong;
+    this.multilinePatternMatched = multilinePatternMatched;
+    this.multilineEventTimeoutSecs = eventTimeoutSecs;
+    this.multilineMaxBytes = multilineMaxBytes;
+    this.multilineMaxLines = multilineMaxLines;
+
     updateTailFiles(skipToEnd);
 
     logger.info("Updating position from position file: " + positionFilePath);
@@ -133,7 +156,7 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
               + "inode: " + inode + ", pos: " + pos + ", path: " + path);
         }
         TailFile tf = tailFiles.get(inode);
-        if (tf != null && tf.updatePos(path, inode, pos)) {
+        if (tf != null && tf.updatePos(tf.getPath(), inode, pos)) {
           tailFiles.put(inode, tf);
         } else {
           logger.info("Missing file: " + path + ", inode: " + inode + ", pos: " + pos);
@@ -192,6 +215,17 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
       long lastPos = currentFile.getPos();
       currentFile.updateFilePos(lastPos);
     }
+    
+    if (multiline) {
+      currentFile.setMultiline(multiline);
+      currentFile.setMultilinePattern(multilinePattern);
+      currentFile.setMultilinePatternBelong(multilinePatternBelong);
+      currentFile.setMultilinePatternMatched(multilinePatternMatched);
+      currentFile.setMultilineEventTimeoutSecs(multilineEventTimeoutSecs);
+      currentFile.setMultilineMaxBytes(multilineMaxBytes);
+      currentFile.setMultilineMaxLines(multilineMaxLines);
+    }
+
     List<Event> events = currentFile.readEvents(numEvents, backoffWithoutNL, addByteOffset);
     if (events.isEmpty()) {
       return events;
@@ -244,11 +278,12 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
       for (File f : taildir.getMatchingFiles()) {
         long inode = getInode(f);
         TailFile tf = tailFiles.get(inode);
-        if (tf == null || !tf.getPath().equals(f.getAbsolutePath())) {
+        //if (tf == null || !tf.getPath().equals(f.getAbsolutePath())) {
+        if (tf == null ) {
           long startPos = skipToEnd ? f.length() : 0;
           tf = openFile(f, headers, inode, startPos);
         } else {
-          boolean updated = tf.getLastUpdated() < f.lastModified() || tf.getPos() != f.length();
+          boolean updated = tf.getLastUpdated() < f.lastModified();
           if (updated) {
             if (tf.getRaf() == null) {
               tf = openFile(f, headers, inode, tf.getPos());
@@ -274,7 +309,12 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
 
 
   private long getInode(File file) throws IOException {
-    long inode = (long) Files.getAttribute(file.toPath(), "unix:ino");
+    long inode;
+    if (OS_NAME.contains("windows")) {
+      inode = Long.parseLong(WinFileUtil.getFileId(file.toPath().toString()));
+    } else {
+      inode = (long) Files.getAttribute(file.toPath(), "unix:ino");
+    }
     return inode;
   }
 
@@ -301,6 +341,14 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
             TaildirSourceConfigurationConstants.DEFAULT_FILE_HEADER;
     private String fileNameHeader =
             TaildirSourceConfigurationConstants.DEFAULT_FILENAME_HEADER_KEY;
+    private boolean multiline;
+    private String multilinePattern;
+    private String multilinePatternBelong;
+    private boolean multilinePatternMatched;
+    private long eventTimeoutSecs;
+    private int multilineMaxBytes;
+    private int multilineMaxLines;
+
 
     public Builder filePaths(Map<String, String> filePaths) {
       this.filePaths = filePaths;
@@ -342,10 +390,49 @@ public class ReliableTaildirEventReader implements ReliableEventReader {
       return this;
     }
 
+    public Builder multiline(boolean multiline) {
+      this.multiline = multiline;
+      return this;
+    }
+
+    public Builder multilinePattern(String multilinePattern) {
+      this.multilinePattern = multilinePattern;
+      return this;
+    }
+
+    public Builder multilinePatternBelong(String multilinePatternBelong) {
+      this.multilinePatternBelong = multilinePatternBelong;
+      return this;
+    }
+
+    public Builder multilinePatternMatched(boolean multilinePatternMatched) {
+      this.multilinePatternMatched = multilinePatternMatched;
+      return this;
+    }
+
+    public Builder eventTimeoutSecs(long eventTimeoutSecs) {
+      this.eventTimeoutSecs = eventTimeoutSecs;
+      return this;
+    }
+
+    public Builder multilineMaxBytes(int multilineMaxBytes) {
+      this.multilineMaxBytes = multilineMaxBytes;
+      return this;
+    }
+
+    public Builder multilineMaxLines(int multilineMaxLines) {
+      this.multilineMaxLines = multilineMaxLines;
+      return this;
+    }
+
     public ReliableTaildirEventReader build() throws IOException {
       return new ReliableTaildirEventReader(filePaths, headerTable, positionFilePath, skipToEnd,
                                             addByteOffset, cachePatternMatching,
-                                            annotateFileName, fileNameHeader);
+                                            annotateFileName, fileNameHeader,
+                                            multiline, multilinePattern,
+                                            multilinePatternBelong, multilinePatternMatched,
+                                            eventTimeoutSecs, multilineMaxBytes, multilineMaxLines);
+
     }
   }
 
